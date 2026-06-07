@@ -34,8 +34,16 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Memuat file konfigurasi rahasia (.env) untuk mengambil GEMINI_API_KEY secara aman
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# Konfigurasi resmi SDK Google Generative AI menggunakan kunci dari file .env
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Konfigurasi resmi SDK Google Generative AI secara opsional
+gemini_key = os.getenv("GEMINI_API_KEY")
+if gemini_key:
+    try:
+        genai.configure(api_key=gemini_key)
+        print("[+] API Key Gemini berhasil dikonfigurasi.")
+    except Exception as e:
+        print(f"[X] Gagal mengonfigurasi Gemini API: {e}")
+else:
+    print("[!] Peringatan: GEMINI_API_KEY tidak ditemukan di environment. Fallback Gemini akan dinonaktifkan.")
 
 # Inisialisasi aplikasi Flask untuk antarmuka web
 app = Flask(__name__)
@@ -66,23 +74,28 @@ input_details = None
 output_details = None
 model = None
 
-# Membaca model TFLite (Prioritas utama karena ringan, cepat, dan hemat memori CPU)
-if os.path.exists(MODEL_TFLITE_PATH):
-    print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
-    if has_tensorflow:
-        interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
+# Membaca model TFLite atau Keras secara aman dengan penanganan kesalahan
+try:
+    if os.path.exists(MODEL_TFLITE_PATH):
+        print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
+        if has_tensorflow:
+            interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
+        else:
+            interpreter = tflite.Interpreter(model_path=MODEL_TFLITE_PATH)
+        interpreter.allocate_tensors()  # Alokasi memori tensor
+        input_details = interpreter.get_input_details()    # Detail bentuk input gambar
+        output_details = interpreter.get_output_details()  # Detail bentuk output prediksi
+        is_tflite = True
+    # Membaca model Keras (Sebagai cadangan lokal jika file TFLite tidak ditemukan dan TF terinstal)
+    elif has_tensorflow and os.path.exists(MODEL_KERAS_PATH):
+        print(f"[+] Memuat model Keras dari: {MODEL_KERAS_PATH} (Fallback)...")
+        model = tf.keras.models.load_model(MODEL_KERAS_PATH)
     else:
-        interpreter = tflite.Interpreter(model_path=MODEL_TFLITE_PATH)
-    interpreter.allocate_tensors()  # Alokasi memori tensor
-    input_details = interpreter.get_input_details()    # Detail bentuk input gambar
-    output_details = interpreter.get_output_details()  # Detail bentuk output prediksi
-    is_tflite = True
-# Membaca model Keras (Sebagai cadangan lokal jika file TFLite tidak ditemukan dan TF terinstal)
-elif has_tensorflow and os.path.exists(MODEL_KERAS_PATH):
-    print(f"[+] Memuat model Keras dari: {MODEL_KERAS_PATH} (Fallback)...")
-    model = tf.keras.models.load_model(MODEL_KERAS_PATH)
-else:
-    print("[!] ERROR: Tidak dapat memuat model pendeteksi sepatu!")
+        print("[!] ERROR: Tidak dapat memuat model pendeteksi sepatu!")
+except Exception as model_err:
+    print(f"[X] Gagal memuat model klasifikasi lokal: {model_err}")
+    print("[!] Sistem akan beroperasi penuh menggunakan Gemini AI sebagai backend utama.")
+    is_tflite = False
 
 # Urutan nama kelas target yang dideteksi oleh model lokal kita
 class_names = ['adidas', 'lainnya', 'new_balance', 'nike', 'puma']
@@ -164,6 +177,11 @@ def predict_shoe_with_gemini(img_path):
        agar Gemini wajib mengembalikan data dalam format JSON yang bersih dan mudah diparsing.
     """
     try:
+        # Memeriksa apakah API Key Gemini dikonfigurasi sebelum melakukan panggilan
+        if not os.getenv("GEMINI_API_KEY"):
+            print("[!] Peringatan: Panggilan Gemini dilewati karena GEMINI_API_KEY tidak dikonfigurasi.")
+            return None, None
+
         # Membuka gambar menggunakan format Pillow PIL agar didukung oleh Gemini SDK
         img = Image.open(img_path)
         
@@ -250,14 +268,23 @@ def predict():
         
         # Lakukan prediksi
         try:
-            # Langkah 1: Prediksi menggunakan Model TFLite lokal
-            label, confidence = predict_shoe(filepath)
+            # Langkah 1: Prediksi menggunakan Model TFLite lokal (jika berhasil dimuat)
+            label = None
+            confidence = None
             used_gemini = False
-            print(f"[+] Prediksi Lokal: {label} ({confidence:.2f}%)")
             
-            # Langkah 2: Pemicu Fallback Gemini (Tingkat Keyakinan < 60.00% ATAU Label Terdeteksi "LAINNYA")
-            if confidence < 60.00 or label == "LAINNYA":
-                print(f"[!] Keyakinan rendah ({confidence:.2f}%) atau terdeteksi 'LAINNYA'. Memicu fallback Gemini...")
+            if is_tflite or (has_tensorflow and model is not None):
+                try:
+                    label, confidence = predict_shoe(filepath)
+                    print(f"[+] Prediksi Lokal: {label} ({confidence:.2f}%)")
+                except Exception as local_err:
+                    print(f"[X] Gagal melakukan prediksi lokal: {local_err}. Mencoba fallback ke Gemini...")
+            else:
+                print("[!] Model lokal tidak tersedia. Mencoba menggunakan Gemini AI secara langsung...")
+            
+            # Langkah 2: Pemicu Fallback Gemini (Keyakinan rendah, terdeteksi "LAINNYA", atau model lokal tidak tersedia)
+            if label is None or confidence < 60.00 or label == "LAINNYA":
+                print(f"[!] Memicu Gemini (Alasan: model lokal tidak tersedia/keyakinan rendah/LAINNYA)...")
                 gemini_label, gemini_confidence = predict_shoe_with_gemini(filepath)
                 
                 # Jika pemanggilan Gemini sukses, gunakan hasilnya
@@ -267,7 +294,10 @@ def predict():
                     used_gemini = True
                     print(f"[GEMINI] Hasil Gemini: {label} ({confidence:.2f}%)")
                 else:
-                    print("[!] Panggilan Gemini gagal. Tetap menggunakan hasil prediksi lokal.")
+                    if label is None:
+                        raise ValueError("Gagal mendeteksi gambar: Model lokal tidak tersedia dan panggilan Gemini AI gagal.")
+                    else:
+                        print("[!] Panggilan Gemini gagal. Tetap menggunakan hasil prediksi lokal.")
             
             # Langkah 3: Kirim respons JSON akhir ke frontend
             return jsonify({
