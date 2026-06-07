@@ -40,7 +40,7 @@
             <div class="glass-panel main-card">
                 <header class="card-header">
                     <h2>Identifikasi Merek</h2>
-                    <p>Unggah foto sepatu untuk dianalisis oleh sistem klasifikasi Hybrid AI (MobileNetV3 + Gemini Fallback).</p>
+                    <p>Unggah foto sepatu untuk dianalisis oleh sistem klasifikasi MobileNetV3 (TensorFlow Lite).</p>
                 </header>
 
                 <!-- Area Drag & Drop untuk mengunggah gambar secara interaktif -->
@@ -80,9 +80,7 @@
                     <div class="prediction-card">
                         <div class="pred-header">
                             <!-- Status akurasi umum model lokal -->
-                            <span class="badge-success">Berhasil Dikenali</span>
-                            <!-- Lencana khusus yang muncul jika klasifikasi dialihkan dan diverifikasi oleh Gemini AI -->
-                            <span id="gemini-badge" class="badge-gemini hidden">⚡ Gemini AI Verified</span>
+                            <span class="badge-success">Akurasi Tinggi</span>
                         </div>
                         
                         <!-- Nama Merek Hasil Tebakan (Adidas, Nike, Puma, dll) -->
@@ -131,16 +129,16 @@
                 </div>
                 <ul class="stats-list">
                     <li>
-                        <span class="stat-label">Arsitektur Lokal</span>
+                        <span class="stat-label">Arsitektur Model</span>
                         <span class="stat-value highlight">MobileNetV3-Large</span>
                     </li>
                     <li>
-                        <span class="stat-label">Model Cloud Fallback</span>
-                        <span class="stat-value" style="color: #c084fc;">Gemini 2.5 Flash</span>
+                        <span class="stat-label">Format Model</span>
+                        <span class="stat-value" style="color: #38bdf8;">TensorFlow Lite (.tflite)</span>
                     </li>
                     <li>
-                        <span class="stat-label">Batas Fallback</span>
-                        <span class="stat-value" style="color: #f59e0b;">< 60.00% / LAINNYA</span>
+                        <span class="stat-label">Ukuran Model</span>
+                        <span class="stat-value" style="color: #34d399;">3.57 MB</span>
                     </li>
                 </ul>
             </div>
@@ -154,15 +152,15 @@
                     <div class="tl-item">
                         <div class="tl-dot"></div>
                         <div class="tl-content">
-                            <h4>1. Klasifikasi Lokal (Cepat)</h4>
-                            <p>Model lokal TFLite (3.57MB) mengekstrak fitur visual secara cepat di server.</p>
+                            <h4>1. Unggah Gambar</h4>
+                            <p>Unggah foto sepatu format PNG, JPG, JPEG, WEBP, atau JFIF.</p>
                         </div>
                     </div>
                     <div class="tl-item">
                         <div class="tl-dot"></div>
                         <div class="tl-content">
-                            <h4>2. Verifikasi Gemini (Akurat)</h4>
-                            <p>Bila model lokal ragu, sistem mengirim gambar ke Gemini 2.5 Flash untuk akurasi optimal.</p>
+                            <h4>2. Klasifikasi TFLite (Cepat)</h4>
+                            <p>Model TFLite (3.57MB) mengekstrak fitur visual secara cepat di server.</p>
                         </div>
                     </div>
                 </div>
@@ -257,28 +255,12 @@
                     resultLabel.textContent = data.label.replace(/_/g, ' ');
                     resultConfidenceText.textContent = `${data.confidence}%`;
                     
-                    // Hubungkan referensi lencana Gemini
-                    const geminiBadge = document.getElementById('gemini-badge');
-                    
-                    // Tampilkan lencana Gemini AI Verified hanya jika backend memicu fallback Gemini
-                    if(data.used_gemini) {
-                        geminiBadge.classList.remove('hidden');
-                    } else {
-                        geminiBadge.classList.add('hidden');
-                    }
-                    
                     // Animasi bar keyakinan dengan penundaan 100ms agar efek transisi berjalan mulus
                     setTimeout(() => {
                         confidenceBar.style.width = `${data.confidence}%`;
                         
                         // Menyesuaikan warna bar dan lencana sesuai kondisi keputusan AI
-                        if(data.used_gemini) {
-                            // Gaya visual bernuansa Gemini (Ungu ke Indigo)
-                            confidenceBar.style.background = 'linear-gradient(90deg, #a855f7, #6366f1)';
-                            document.querySelector('.badge-success').textContent = 'Gemini AI';
-                            document.querySelector('.badge-success').style.background = 'rgba(168, 85, 247, 0.2)';
-                            document.querySelector('.badge-success').style.color = '#c084fc';
-                        } else if(data.confidence < 60) {
+                        if(data.confidence < 60) {
                             // Gaya visual Keyakinan Rendah (Amber/Kuning ke Merah)
                             confidenceBar.style.background = 'linear-gradient(90deg, #f59e0b, #ef4444)';
                             document.querySelector('.badge-success').textContent = 'Keyakinan Rendah';

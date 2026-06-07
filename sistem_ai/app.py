@@ -5,7 +5,6 @@ from flask import Flask, request, render_template, jsonify
 from werkzeug.utils import secure_filename
 from PIL import Image
 from dotenv import load_dotenv
-import google.generativeai as genai
 
 # Impor Model AI secara dinamis untuk mendukung LiteRT / TFLite (tanpa full TensorFlow)
 try:
@@ -28,25 +27,14 @@ except ImportError:
 IS_VERCEL = os.getenv("VERCEL") == "1"
 
 # =====================================================================
-# 1. KONFIGURASI LINGKUNGAN & API KEY GEMINI
+# 1. KONFIGURASI LINGKUNGAN
 # =====================================================================
 
 # Mendapatkan path absolut direktori tempat app.py ini berada
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Memuat file konfigurasi rahasia (.env) untuk mengambil GEMINI_API_KEY secara aman
+# Memuat file konfigurasi rahasia (.env)
 load_dotenv(os.path.join(BASE_DIR, '.env'))
-
-# Konfigurasi resmi SDK Google Generative AI secara opsional
-gemini_key = os.getenv("GEMINI_API_KEY")
-if gemini_key:
-    try:
-        genai.configure(api_key=gemini_key)
-        print("[+] API Key Gemini berhasil dikonfigurasi.")
-    except Exception as e:
-        print(f"[X] Gagal mengonfigurasi Gemini API: {e}")
-else:
-    print("[!] Peringatan: GEMINI_API_KEY tidak ditemukan di environment. Fallback Gemini akan dinonaktifkan.")
 
 # Inisialisasi aplikasi Flask untuk antarmuka web
 app = Flask(__name__)
@@ -97,7 +85,6 @@ try:
         print("[!] ERROR: Tidak dapat memuat model pendeteksi sepatu!")
 except Exception as model_err:
     print(f"[X] Gagal memuat model klasifikasi lokal: {model_err}")
-    print("[!] Sistem akan beroperasi penuh menggunakan Gemini AI sebagai backend utama.")
     is_tflite = False
 
 # Urutan nama kelas target yang dideteksi oleh model lokal kita
@@ -167,82 +154,8 @@ def predict_shoe(img_path):
     return class_names[predicted_index].upper(), confidence
 
 # =====================================================================
-# 5. FUNGSI CADANGAN MENGGUNAKAN GEMINI 2.5 FLASH API
 # =====================================================================
-def predict_shoe_with_gemini(img_path):
-    """
-    Mengirimkan gambar sepatu ke Gemini API jika model lokal ragu-ragu.
-    Mendukung fallback otomatis dari gemini-2.5-flash ke gemini-1.5-flash jika terjadi error.
-    """
-    try:
-        # Memeriksa apakah API Key Gemini dikonfigurasi sebelum melakukan panggilan
-        if not os.getenv("GEMINI_API_KEY"):
-            print("[!] Peringatan: Panggilan Gemini dilewati karena GEMINI_API_KEY tidak dikonfigurasi.")
-            return None, None, "Kunci API Gemini (GEMINI_API_KEY) tidak ditemukan."
-
-        # Membuka gambar menggunakan format Pillow PIL agar didukung oleh Gemini SDK
-        img = Image.open(img_path)
-        
-        # Instruksi mendetail untuk memandu Gemini
-        prompt = """
-        Analyze this shoe image. Identify the brand of the shoe.
-        You must classify it into one of these exact brand values:
-        - ADIDAS
-        - NIKE
-        - NEW_BALANCE
-        - PUMA
-        - LAINNYA
-        
-        Return a JSON object in this exact format:
-        {
-          "brand": "BRAND_NAME",
-          "confidence": 95.0
-        }
-        Where BRAND_NAME must be one of the brand values listed above (all uppercase, with underscores for NEW_BALANCE), and confidence is a float from 0.0 to 100.0 representing your confidence.
-        """
-        
-        data = None
-        last_error = None
-        
-        # Coba gunakan gemini-2.5-flash terlebih dahulu
-        try:
-            print("[*] Mencoba prediksi menggunakan model gemini-2.5-flash...")
-            gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-            response = gemini_model.generate_content(
-                [prompt, img],
-                generation_config={"response_mime_type": "application/json"}
-            )
-            data = json.loads(response.text.strip())
-        except Exception as e_2_5:
-            last_error = str(e_2_5)
-            print(f"[!] Gagal menggunakan gemini-2.5-flash: {e_2_5}. Melakukan fallback ke gemini-1.5-flash...")
-            
-            # Fallback ke gemini-1.5-flash
-            try:
-                gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-                response = gemini_model.generate_content(
-                    [prompt, img],
-                    generation_config={"response_mime_type": "application/json"}
-                )
-                data = json.loads(response.text.strip())
-                last_error = None # Berhasil
-            except Exception as e_1_5:
-                last_error = f"gemini-2.5: {last_error} | gemini-1.5: {str(e_1_5)}"
-                print(f"[X] Gagal juga menggunakan gemini-1.5-flash: {e_1_5}")
-        
-        if data is None:
-            raise ValueError(f"Seluruh model Gemini gagal merespons. Detail: {last_error}")
-            
-        brand = data.get("brand", "LAINNYA").upper()
-        confidence = float(data.get("confidence", 95.0))
-        
-        return brand, confidence, None
-    except Exception as e:
-        print(f"[X] Gagal melakukan prediksi dengan Gemini: {e}")
-        return None, None, str(e)
-
-# =====================================================================
-# 6. ROUTING ROUTE (PENGATURAN ALUR WEB & API FLASK)
+# 5. ROUTING ROUTE (PENGATURAN ALUR WEB & API FLASK)
 # =====================================================================
 
 @app.route('/')
@@ -257,14 +170,7 @@ def index():
 def predict():
     """
     Endpoint POST API /predict:
-    Menerima berkas foto dari client, menyimpannya, lalu mengeksekusi logika Hybrid AI.
-    
-    Alur Hybrid AI (Scheme 1):
-    1. Lakukan prediksi lokal menggunakan TFLite.
-    2. Periksa apakah tingkat keyakinan (confidence) di bawah 60.00% ATAU terdeteksi sebagai "LAINNYA".
-       - Jika Ya: Panggil Gemini API untuk menganalisis gambar secara mendalam. Ganti hasil prediksi lokal.
-       - Jika Tidak: Gunakan hasil prediksi lokal (hemat kuota API dan sangat cepat).
-    3. Kembalikan data dalam format JSON ke client.
+    Menerima berkas foto dari client, menyimpannya, lalu mengeksekusi prediksi menggunakan model lokal.
     """
     # Validasi apakah berkas dikirim dalam request POST
     if 'file' not in request.files:
@@ -292,47 +198,19 @@ def predict():
         
         # Lakukan prediksi
         try:
-            # Langkah 1: Prediksi menggunakan Model TFLite lokal (jika berhasil dimuat)
-            label = None
-            confidence = None
-            used_gemini = False
-            
+            # Langkah 1: Prediksi menggunakan Model TFLite/Keras lokal
             if is_tflite or (has_tensorflow and model is not None):
-                try:
-                    label, confidence = predict_shoe(filepath)
-                    print(f"[+] Prediksi Lokal: {label} ({confidence:.2f}%)")
-                except Exception as local_err:
-                    print(f"[X] Gagal melakukan prediksi lokal: {local_err}. Mencoba fallback ke Gemini...")
+                label, confidence = predict_shoe(filepath)
+                print(f"[+] Prediksi: {label} ({confidence:.2f}%)")
             else:
-                print("[!] Model lokal tidak tersedia. Mencoba menggunakan Gemini AI secara langsung...")
+                raise ValueError("Model klasifikasi lokal tidak tersedia di server!")
             
-            # Langkah 2: Pemicu Fallback Gemini (Keyakinan rendah, terdeteksi "LAINNYA", atau model lokal tidak tersedia)
-            if label is None or confidence < 60.00 or label == "LAINNYA":
-                print(f"[!] Memicu Gemini (Alasan: model lokal tidak tersedia/keyakinan rendah/LAINNYA)...")
-                gemini_label, gemini_confidence, gemini_error = predict_shoe_with_gemini(filepath)
-                
-                # Jika pemanggilan Gemini sukses, gunakan hasilnya
-                if gemini_label is not None:
-                    label = gemini_label
-                    confidence = gemini_confidence
-                    used_gemini = True
-                    print(f"[GEMINI] Hasil Gemini: {label} ({confidence:.2f}%)")
-                else:
-                    if label is None:
-                        if not os.getenv("GEMINI_API_KEY"):
-                            raise ValueError("Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di dashboard Vercel Anda.")
-                        else:
-                            raise ValueError(f"Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan panggilan ke Gemini AI gagal. Detail: {gemini_error}")
-                    else:
-                        print(f"[!] Panggilan Gemini gagal ({gemini_error}). Tetap menggunakan hasil prediksi lokal.")
-            
-            # Langkah 3: Kirim respons JSON akhir ke frontend
+            # Langkah 2: Kirim respons JSON akhir ke frontend
             return jsonify({
                 'success': True,
                 'label': label,
                 'confidence': f"{confidence:.2f}",
-                'image_url': f"/static/uploads/{filename}" if not IS_VERCEL else "",
-                'used_gemini': used_gemini
+                'image_url': f"/static/uploads/{filename}" if not IS_VERCEL else ""
             })
         except Exception as e:
             print(f"[X] Error Prediksi: {str(e)}")

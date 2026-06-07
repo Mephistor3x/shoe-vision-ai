@@ -255,35 +255,4 @@ h1, h2, h3, h4 { font-family: 'Outfit', sans-serif; } /* Font modern bersudut di
 /* Footer */
 footer { text-align: center; padding: 20px; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); }
 
-/* =====================================================================
-   11. STYLE KHAS LENCANA VERIFIED GEMINI AI & EFEK PULSE NYALA (GLOW)
-   ===================================================================== */
-.badge-gemini {
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 4px 12px;
-    border-radius: 20px;
-    /* Gradasi warna ungu ke biru indigo khas Gemini */
-    background: linear-gradient(135deg, #a855f7, #6366f1);
-    color: #ffffff;
-    /* Bayangan bercahaya luar */
-    box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
-    margin-left: 8px;
-    display: inline-flex;
-    align-items: center;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    /* Menghubungkan animasi denyut cahaya gemini-pulse */
-    animation: gemini-pulse 2s infinite alternate;
-}
 
-/* Animasi denyut cahaya dan perbesaran mikro untuk efek Premium verified */
-@keyframes gemini-pulse {
-    0% {
-        box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
-        transform: scale(1);
-    }
-    100% {
-        box-shadow: 0 0 16px rgba(168, 85, 247, 0.8), 0 0 20px rgba(99, 102, 241, 0.4);
-        transform: scale(1.03); /* Membesar sedikit */
-    }
-}
