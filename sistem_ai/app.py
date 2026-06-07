@@ -7,7 +7,7 @@ from PIL import Image
 from dotenv import load_dotenv
 import google.generativeai as genai
 
-# Impor Model AI secara dinamis untuk mendukung tflite-runtime (tanpa full TensorFlow)
+# Impor Model AI secara dinamis untuk mendukung LiteRT / TFLite (tanpa full TensorFlow)
 try:
     import tensorflow as tf
     from tensorflow.keras.preprocessing import image
@@ -15,10 +15,14 @@ try:
     has_tensorflow = True
     print("[+] Berhasil mengimpor TensorFlow (Menggunakan library lengkap).")
 except ImportError:
-    # Fallback ke tflite_runtime jika full TensorFlow tidak terinstal (misalnya di Hugging Face)
-    import tflite_runtime.interpreter as tflite
+    # Fallback ke ai-edge-litert (atau tflite_runtime) jika full TensorFlow tidak terinstal (misalnya di Hugging Face)
+    try:
+        import ai_edge_litert.interpreter as tflite
+        print("[+] TensorFlow tidak ditemukan. Menggunakan fallback ai-edge-litert (LiteRT).")
+    except ImportError:
+        import tflite_runtime.interpreter as tflite
+        print("[+] TensorFlow tidak ditemukan. Menggunakan fallback tflite-runtime (Ringan).")
     has_tensorflow = False
-    print("[+] TensorFlow tidak ditemukan. Menggunakan fallback tflite-runtime (Ringan).")
 
 # =====================================================================
 # 1. KONFIGURASI LINGKUNGAN & API KEY GEMINI
