@@ -175,25 +175,17 @@ def predict_shoe(img_path):
 # =====================================================================
 def predict_shoe_with_gemini(img_path):
     """
-    Mengirimkan gambar sepatu ke Gemini 2.5 Flash API jika model lokal ragu-ragu.
-    
-    Proses:
-    1. Membuka gambar menggunakan Pillow.
-    2. Menyusun prompt teks yang tegas meminta klasifikasi ke 5 merek sasaran.
-    3. Menggunakan fitur Structured Output (response_mime_type: application/json)
-       agar Gemini wajib mengembalikan data dalam format JSON yang bersih dan mudah diparsing.
+    Mengirimkan gambar sepatu ke Gemini API jika model lokal ragu-ragu.
+    Mendukung fallback otomatis dari gemini-2.5-flash ke gemini-1.5-flash jika terjadi error.
     """
     try:
         # Memeriksa apakah API Key Gemini dikonfigurasi sebelum melakukan panggilan
         if not os.getenv("GEMINI_API_KEY"):
             print("[!] Peringatan: Panggilan Gemini dilewati karena GEMINI_API_KEY tidak dikonfigurasi.")
-            return None, None
+            return None, None, "Kunci API Gemini (GEMINI_API_KEY) tidak ditemukan."
 
         # Membuka gambar menggunakan format Pillow PIL agar didukung oleh Gemini SDK
         img = Image.open(img_path)
-        
-        # Menggunakan model Gemini 2.5 Flash yang sangat cepat dan mendukung input multimodal (gambar+teks)
-        gemini_model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Instruksi mendetail untuk memandu Gemini
         prompt = """
@@ -213,21 +205,45 @@ def predict_shoe_with_gemini(img_path):
         Where BRAND_NAME must be one of the brand values listed above (all uppercase, with underscores for NEW_BALANCE), and confidence is a float from 0.0 to 100.0 representing your confidence.
         """
         
-        # Mengirimkan prompt dan gambar ke Gemini API
-        response = gemini_model.generate_content(
-            [prompt, img],
-            generation_config={"response_mime_type": "application/json"} # Wajib mengembalikan JSON valid
-        )
+        data = None
+        last_error = None
         
-        # Membaca teks hasil respons dan mengubahnya kembali menjadi objek dictionary Python
-        data = json.loads(response.text.strip())
+        # Coba gunakan gemini-2.5-flash terlebih dahulu
+        try:
+            print("[*] Mencoba prediksi menggunakan model gemini-2.5-flash...")
+            gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+            response = gemini_model.generate_content(
+                [prompt, img],
+                generation_config={"response_mime_type": "application/json"}
+            )
+            data = json.loads(response.text.strip())
+        except Exception as e_2_5:
+            last_error = str(e_2_5)
+            print(f"[!] Gagal menggunakan gemini-2.5-flash: {e_2_5}. Melakukan fallback ke gemini-1.5-flash...")
+            
+            # Fallback ke gemini-1.5-flash
+            try:
+                gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                response = gemini_model.generate_content(
+                    [prompt, img],
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                data = json.loads(response.text.strip())
+                last_error = None # Berhasil
+            except Exception as e_1_5:
+                last_error = f"gemini-2.5: {last_error} | gemini-1.5: {str(e_1_5)}"
+                print(f"[X] Gagal juga menggunakan gemini-1.5-flash: {e_1_5}")
+        
+        if data is None:
+            raise ValueError(f"Seluruh model Gemini gagal merespons. Detail: {last_error}")
+            
         brand = data.get("brand", "LAINNYA").upper()
         confidence = float(data.get("confidence", 95.0))
         
-        return brand, confidence
+        return brand, confidence, None
     except Exception as e:
         print(f"[X] Gagal melakukan prediksi dengan Gemini: {e}")
-        return None, None
+        return None, None, str(e)
 
 # =====================================================================
 # 6. ROUTING ROUTE (PENGATURAN ALUR WEB & API FLASK)
@@ -297,7 +313,7 @@ def predict():
             # Langkah 2: Pemicu Fallback Gemini (Keyakinan rendah, terdeteksi "LAINNYA", atau model lokal tidak tersedia)
             if label is None or confidence < 60.00 or label == "LAINNYA":
                 print(f"[!] Memicu Gemini (Alasan: model lokal tidak tersedia/keyakinan rendah/LAINNYA)...")
-                gemini_label, gemini_confidence = predict_shoe_with_gemini(filepath)
+                gemini_label, gemini_confidence, gemini_error = predict_shoe_with_gemini(filepath)
                 
                 # Jika pemanggilan Gemini sukses, gunakan hasilnya
                 if gemini_label is not None:
@@ -310,9 +326,9 @@ def predict():
                         if not os.getenv("GEMINI_API_KEY"):
                             raise ValueError("Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di dashboard Vercel Anda.")
                         else:
-                            raise ValueError("Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan panggilan ke Gemini AI gagal. Harap pastikan kunci API Gemini Anda valid.")
+                            raise ValueError(f"Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan panggilan ke Gemini AI gagal. Detail: {gemini_error}")
                     else:
-                        print("[!] Panggilan Gemini gagal. Tetap menggunakan hasil prediksi lokal.")
+                        print(f"[!] Panggilan Gemini gagal ({gemini_error}). Tetap menggunakan hasil prediksi lokal.")
             
             # Langkah 3: Kirim respons JSON akhir ke frontend
             return jsonify({
