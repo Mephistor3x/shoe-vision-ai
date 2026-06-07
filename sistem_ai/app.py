@@ -66,6 +66,27 @@ input_details = None
 output_details = None
 model = None
 
+# Penanganan Git LFS di platform Vercel (Vercel tidak mengunduh file LFS secara otomatis)
+# Jika file model berukuran kecil (< 100 KB), itu adalah pointer LFS. Kita perlu mengunduh model asli.
+if os.path.exists(MODEL_TFLITE_PATH) and os.path.getsize(MODEL_TFLITE_PATH) < 100000:
+    print("[!] Model TFLite lokal terdeteksi sebagai pointer Git LFS (bukan file model asli).")
+    DOWNLOAD_PATH = os.path.join('/tmp', 'model_merek_sepatu.tflite') if IS_VERCEL else MODEL_TFLITE_PATH
+    
+    # Download file asli dari media server GitHub jika belum ada di cache lokal
+    if not os.path.exists(DOWNLOAD_PATH) or os.path.getsize(DOWNLOAD_PATH) < 100000:
+        print(f"[!] Mengunduh file model asli dari GitHub media server...")
+        url = "https://media.githubusercontent.com/media/Mephistor3x/shoe-vision-ai/main/sistem_ai/model_merek_sepatu.tflite"
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(url, DOWNLOAD_PATH)
+            print(f"[+] Download model berhasil disave di: {DOWNLOAD_PATH}")
+        except Exception as dl_err:
+            print(f"[X] Gagal mengunduh model dari GitHub: {dl_err}")
+            
+    # Perbarui jalur model ke file asli yang baru diunduh jika sukses
+    if os.path.exists(DOWNLOAD_PATH) and os.path.getsize(DOWNLOAD_PATH) > 100000:
+        MODEL_TFLITE_PATH = DOWNLOAD_PATH
+
 try:
     if os.path.exists(MODEL_TFLITE_PATH):
         print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
