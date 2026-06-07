@@ -8,10 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "sistem_ai/static/$1"
-    },
-    {
       "src": "/(.*)",
       "dest": "sistem_ai/app.py"
     }
