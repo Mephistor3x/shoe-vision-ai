@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "sistem_ai/app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "sistem_ai/static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "sistem_ai/app.py"
+    }
+  ]
+}
