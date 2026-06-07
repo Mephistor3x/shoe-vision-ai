@@ -307,7 +307,10 @@ def predict():
                     print(f"[GEMINI] Hasil Gemini: {label} ({confidence:.2f}%)")
                 else:
                     if label is None:
-                        raise ValueError("Gagal mendeteksi gambar: Model lokal tidak tersedia dan panggilan Gemini AI gagal.")
+                        if not os.getenv("GEMINI_API_KEY"):
+                            raise ValueError("Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan kunci API Gemini (GEMINI_API_KEY) belum dikonfigurasi di dashboard Vercel Anda.")
+                        else:
+                            raise ValueError("Gagal mendeteksi gambar: Model lokal dinonaktifkan di Vercel, dan panggilan ke Gemini AI gagal. Harap pastikan kunci API Gemini Anda valid.")
                     else:
                         print("[!] Panggilan Gemini gagal. Tetap menggunakan hasil prediksi lokal.")
             
