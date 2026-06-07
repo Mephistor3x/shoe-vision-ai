@@ -232,6 +232,9 @@
             loading.classList.remove('hidden');
             resultArea.classList.add('hidden');
 
+            // Set preview gambar lokal terlebih dahulu agar langsung tampil di UI
+            previewImage.src = URL.createObjectURL(file);
+
             // Menyusun data form HTTP untuk menyertakan berkas gambar
             const formData = new FormData();
             formData.append('file', file);
@@ -246,8 +249,10 @@
                 loading.classList.add('hidden'); // Sembunyikan animasi loading
                 
                 if(data.success) {
-                    // Masukkan URL gambar hasil upload ke elemen preview
-                    previewImage.src = data.image_url;
+                    // Masukkan URL gambar hasil upload ke elemen preview jika disediakan oleh server
+                    if(data.image_url) {
+                        previewImage.src = data.image_url;
+                    }
                     // Tampilkan label merek (mengubah simbol _ menjadi spasi)
                     resultLabel.textContent = data.label.replace(/_/g, ' ');
                     resultConfidenceText.textContent = `${data.confidence}%`;

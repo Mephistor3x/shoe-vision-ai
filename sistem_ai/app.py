@@ -24,6 +24,9 @@ except ImportError:
         print("[+] TensorFlow tidak ditemukan. Menggunakan fallback tflite-runtime (Ringan).")
     has_tensorflow = False
 
+# Cek apakah sedang berjalan di lingkungan serverless Vercel
+IS_VERCEL = os.getenv("VERCEL") == "1"
+
 # =====================================================================
 # 1. KONFIGURASI LINGKUNGAN & API KEY GEMINI
 # =====================================================================
@@ -57,8 +60,9 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'jfif'}  # Ekstensi gambar yang didukung
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Membuat folder unggahan otomatis jika belum ada di server
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Membuat folder unggahan otomatis jika belum ada di server (dilewati di Vercel karena read-only)
+if not IS_VERCEL:
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # =====================================================================
 # 3. MEMUAT MODEL MACHINE LEARNING LOKAL (TFLITE / KERAS)
@@ -67,9 +71,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Menentukan jalur berkas model hasil pelatihan (MobileNetV3)
 MODEL_TFLITE_PATH = os.path.join(BASE_DIR, 'model_merek_sepatu.tflite')
 MODEL_KERAS_PATH = os.path.join(BASE_DIR, 'model_merek_sepatu.keras')
-
-# Cek apakah sedang berjalan di lingkungan serverless Vercel
-IS_VERCEL = os.getenv("VERCEL") == "1"
 
 is_tflite = False
 interpreter = None
@@ -263,10 +264,15 @@ def predict():
         
     print(f"[?] Menerima file: '{file.filename}'")
     if file and allowed_file(file.filename):
-        # Amankan nama file dari karakter aneh dan simpan di folder uploads
+        # Amankan nama file dari karakter aneh
         filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
+        # Di Vercel, kita simpan di folder /tmp karena filesystem lainnya read-only
+        if IS_VERCEL:
+            filepath = os.path.join('/tmp', filename)
+        else:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            
         print(f"[!] Menghandle file: {filename}")
         print(f"[!] Path simpan: {filepath}")
         
@@ -310,7 +316,7 @@ def predict():
                 'success': True,
                 'label': label,
                 'confidence': f"{confidence:.2f}",
-                'image_url': f"/static/uploads/{filename}",
+                'image_url': f"/static/uploads/{filename}" if not IS_VERCEL else "",
                 'used_gemini': used_gemini
             })
         except Exception as e:
