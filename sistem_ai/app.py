@@ -78,12 +78,8 @@ input_details = None
 output_details = None
 model = None
 
-# Membaca model TFLite atau Keras secara aman dengan penanganan kesalahan
 try:
-    if IS_VERCEL:
-        print("[*] Berjalan di Vercel (Serverless). Menonaktifkan model lokal untuk stabilitas penuh...")
-        is_tflite = False
-    elif os.path.exists(MODEL_TFLITE_PATH):
+    if os.path.exists(MODEL_TFLITE_PATH):
         print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
         if has_tensorflow:
             interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
