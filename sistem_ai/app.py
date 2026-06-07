@@ -68,6 +68,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 MODEL_TFLITE_PATH = os.path.join(BASE_DIR, 'model_merek_sepatu.tflite')
 MODEL_KERAS_PATH = os.path.join(BASE_DIR, 'model_merek_sepatu.keras')
 
+# Cek apakah sedang berjalan di lingkungan serverless Vercel
+IS_VERCEL = os.getenv("VERCEL") == "1"
+
 is_tflite = False
 interpreter = None
 input_details = None
@@ -76,7 +79,10 @@ model = None
 
 # Membaca model TFLite atau Keras secara aman dengan penanganan kesalahan
 try:
-    if os.path.exists(MODEL_TFLITE_PATH):
+    if IS_VERCEL:
+        print("[*] Berjalan di Vercel (Serverless). Menonaktifkan model lokal untuk stabilitas penuh...")
+        is_tflite = False
+    elif os.path.exists(MODEL_TFLITE_PATH):
         print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
         if has_tensorflow:
             interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
