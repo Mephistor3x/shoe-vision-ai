@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Pengenal Sepatu Premium</title>
+    <!-- Mengimpor Google Fonts: Outfit untuk Header/Judul, Inter untuk teks deskripsi biasa -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Menautkan stylesheet eksternal untuk semua pemformatan gaya visual web -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- 1. LATAR BELAKANG ESTETIK (BLOBS & GRID OVERLAY) -->
+    <!-- Elemen-elemen ini digabungkan secara visual untuk membuat latar belakang gradasi dinamis ber-efek kaca -->
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <div class="grid-overlay"></div>
+    </div>
+
+    <!-- 2. NAVIGASI BAR ATAS -->
+    <nav class="navbar glass-panel-light">
+        <div class="logo">
+            <!-- Icon sepatu/vision SVG inline -->
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #38bdf8; margin-right: 8px;"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path><line x1="16" y1="8" x2="2" y2="22"></line><line x1="17.5" y1="15" x2="9" y2="6.5"></line></svg>
+            Shoe<span class="highlight">Vision</span> AI
+        </div>
+        <div class="nav-links">
+            <a href="#" class="active">Beranda</a>
+            <a href="#">Tentang Model</a>
+        </div>
+    </nav>
+
+    <!-- 3. KONTEN UTAMA (LAYOUT DUA PANEL RESPONSIVE) -->
+    <main class="main-container">
+        
+        <!-- PANEL KIRI: Tempat interaksi upload gambar dan menampilkan hasil deteksi AI -->
+        <div class="left-panel">
+            <div class="glass-panel main-card">
+                <header class="card-header">
+                    <h2>Identifikasi Merek</h2>
+                    <p>Unggah foto sepatu untuk dianalisis oleh sistem klasifikasi Hybrid AI (MobileNetV3 + Gemini Fallback).</p>
+                </header>
+
+                <!-- Area Drag & Drop untuk mengunggah gambar secara interaktif -->
+                <div class="upload-area" id="drop-zone">
+                    <!-- Input file disembunyikan secara visual, tetapi dipicu secara programatik melalui klik javascript -->
+                    <input type="file" id="file-input" accept="image/*" hidden>
+                    <div class="upload-content">
+                        <div class="icon-circle">
+                            <!-- SVG Icon Upload -->
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        </div>
+                        <h3>Unggah Gambar</h3>
+                        <p><strong>Pilih File</strong> atau seret & jatuhkan ke sini</p>
+                        <span class="file-info">Mendukung resolusi tinggi (JPG, PNG, WEBP)</span>
+                    </div>
+                </div>
+
+                <!-- Indikator Loading: Ditampilkan saat server memproses prediksi gambar -->
+                <div id="loading" class="hidden">
+                    <div class="spinner-container">
+                        <div class="spinner"></div>
+                        <div class="spinner-core"></div>
+                    </div>
+                    <p>Ekstraksi fitur AI sedang berlangsung...</p>
+                </div>
+
+                <!-- Area Hasil Analisis: Ditampilkan setelah respon sukses dari backend Flask -->
+                <div id="result-area" class="hidden">
+                    <!-- Bagian Preview Gambar Sepatu yang Diunggah -->
+                    <div class="image-preview">
+                        <img id="preview-image" src="" alt="Preview Sepatu">
+                        <!-- Garis animasi laser scan untuk memberikan nuansa AI visual premium -->
+                        <div class="scan-line"></div>
+                    </div>
+                    
+                    <!-- Kartu Detail Prediksi AI -->
+                    <div class="prediction-card">
+                        <div class="pred-header">
+                            <!-- Status akurasi umum model lokal -->
+                            <span class="badge-success">Berhasil Dikenali</span>
+                            <!-- Lencana khusus yang muncul jika klasifikasi dialihkan dan diverifikasi oleh Gemini AI -->
+                            <span id="gemini-badge" class="badge-gemini hidden">⚡ Gemini AI Verified</span>
+                        </div>
+                        
+                        <!-- Nama Merek Hasil Tebakan (Adidas, Nike, Puma, dll) -->
+                        <h2 id="result-label" class="gradient-text">MEREK</h2>
+                        
+                        <!-- Progress Bar Tingkat Keyakinan -->
+                        <div class="confidence-wrapper">
+                            <div class="conf-labels">
+                                <span>Tingkat Keyakinan</span>
+                                <span id="result-confidence-text" class="highlight-text">0%</span>
+                            </div>
+                            <div class="confidence-bar-container">
+                                <div class="confidence-bar" id="confidence-bar"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tombol Reset untuk mendeteksi gambar baru -->
+                    <button id="reset-btn" class="btn btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px;"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>
+                        Analisis Gambar Lain
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PANEL KANAN: Informasi tambahan tentang sistem model dan spesifikasi arsitektur -->
+        <div class="right-panel">
+            <div class="glass-panel info-card">
+                <div class="info-header">
+                    <div class="icon-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 16 16 12 12 8"></polyline><line x1="8" y1="12" x2="16" y2="12"></line></svg></div>
+                    <h3>Merek Terdaftar</h3>
+                </div>
+                <p class="info-desc">Model ini dilatih khusus untuk mendeteksi dan membedakan varian merek-merek terkemuka.</p>
+                <div class="brand-tags">
+                    <span class="tag">Adidas</span>
+                    <span class="tag">Nike</span>
+                    <span class="tag">New Balance</span>
+                    <span class="tag">Puma</span>
+                </div>
+            </div>
+
+            <div class="glass-panel info-card">
+                <div class="info-header">
+                    <div class="icon-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg></div>
+                    <h3>Spesifikasi Model</h3>
+                </div>
+                <ul class="stats-list">
+                    <li>
+                        <span class="stat-label">Arsitektur Lokal</span>
+                        <span class="stat-value highlight">MobileNetV3-Large</span>
+                    </li>
+                    <li>
+                        <span class="stat-label">Model Cloud Fallback</span>
+                        <span class="stat-value" style="color: #c084fc;">Gemini 2.5 Flash</span>
+                    </li>
+                    <li>
+                        <span class="stat-label">Batas Fallback</span>
+                        <span class="stat-value" style="color: #f59e0b;">< 60.00% / LAINNYA</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="glass-panel info-card">
+                <div class="info-header">
+                    <div class="icon-box"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div>
+                    <h3>Alur Deteksi AI</h3>
+                </div>
+                <div class="timeline">
+                    <div class="tl-item">
+                        <div class="tl-dot"></div>
+                        <div class="tl-content">
+                            <h4>1. Klasifikasi Lokal (Cepat)</h4>
+                            <p>Model lokal TFLite (3.57MB) mengekstrak fitur visual secara cepat di server.</p>
+                        </div>
+                    </div>
+                    <div class="tl-item">
+                        <div class="tl-dot"></div>
+                        <div class="tl-content">
+                            <h4>2. Verifikasi Gemini (Akurat)</h4>
+                            <p>Bila model lokal ragu, sistem mengirim gambar ke Gemini 2.5 Flash untuk akurasi optimal.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- FOOTER Halaman -->
+    <footer>
+        <p>&copy; 2026 <strong>ShoeVision AI</strong>. Sistem Klasifikasi *Computer Vision*.</p>
+    </footer>
+
+    <!-- =====================================================================
+    4. JAVASCRIPT: LOGIKA DRAG-AND-DROP & PANGGILAN API AJAX
+    ===================================================================== -->
+    <script>
+        // Referensi elemen-elemen DOM yang dibutuhkan
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('result-area');
+        const previewImage = document.getElementById('preview-image');
+        const resultLabel = document.getElementById('result-label');
+        const resultConfidenceText = document.getElementById('result-confidence-text');
+        const confidenceBar = document.getElementById('confidence-bar');
+        const resetBtn = document.getElementById('reset-btn');
+
+        // Klik pada area drag-and-drop akan memicu input file bawaan browser
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Event listener saat file ditarik di atas drop area
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault(); // Mencegah browser membuka gambar langsung
+            dropZone.classList.add('dragover'); // Menambahkan border biru berkilau
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        
+        // Event listener saat file dilepaskan di dalam drop area
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if(e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                processFile(fileInput.files[0]);
+            }
+        });
+
+        // Event listener saat user memilih file gambar melalui file dialog
+        fileInput.addEventListener('change', () => {
+            if(fileInput.files.length > 0) processFile(fileInput.files[0]);
+        });
+
+        // Event listener tombol reset untuk membersihkan antarmuka
+        resetBtn.addEventListener('click', () => {
+            resultArea.classList.add('hidden');
+            dropZone.classList.remove('hidden');
+            fileInput.value = '';
+            confidenceBar.style.width = '0%';
+        });
+
+        /**
+         * Mengirimkan file gambar ke server menggunakan fetch API (AJAX) secara asynchronous.
+         */
+        function processFile(file) {
+            // Sembunyikan area upload dan tampilkan animasi loading
+            dropZone.classList.add('hidden');
+            loading.classList.remove('hidden');
+            resultArea.classList.add('hidden');
+
+            // Menyusun data form HTTP untuk menyertakan berkas gambar
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Mengirim request POST ke server Flask
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json()) // Parsing respon teks menjadi format objek JSON
+            .then(data => {
+                loading.classList.add('hidden'); // Sembunyikan animasi loading
+                
+                if(data.success) {
+                    // Masukkan URL gambar hasil upload ke elemen preview
+                    previewImage.src = data.image_url;
+                    // Tampilkan label merek (mengubah simbol _ menjadi spasi)
+                    resultLabel.textContent = data.label.replace(/_/g, ' ');
+                    resultConfidenceText.textContent = `${data.confidence}%`;
+                    
+                    // Hubungkan referensi lencana Gemini
+                    const geminiBadge = document.getElementById('gemini-badge');
+                    
+                    // Tampilkan lencana Gemini AI Verified hanya jika backend memicu fallback Gemini
+                    if(data.used_gemini) {
+                        geminiBadge.classList.remove('hidden');
+                    } else {
+                        geminiBadge.classList.add('hidden');
+                    }
+                    
+                    // Animasi bar keyakinan dengan penundaan 100ms agar efek transisi berjalan mulus
+                    setTimeout(() => {
+                        confidenceBar.style.width = `${data.confidence}%`;
+                        
+                        // Menyesuaikan warna bar dan lencana sesuai kondisi keputusan AI
+                        if(data.used_gemini) {
+                            // Gaya visual bernuansa Gemini (Ungu ke Indigo)
+                            confidenceBar.style.background = 'linear-gradient(90deg, #a855f7, #6366f1)';
+                            document.querySelector('.badge-success').textContent = 'Gemini AI';
+                            document.querySelector('.badge-success').style.background = 'rgba(168, 85, 247, 0.2)';
+                            document.querySelector('.badge-success').style.color = '#c084fc';
+                        } else if(data.confidence < 60) {
+                            // Gaya visual Keyakinan Rendah (Amber/Kuning ke Merah)
+                            confidenceBar.style.background = 'linear-gradient(90deg, #f59e0b, #ef4444)';
+                            document.querySelector('.badge-success').textContent = 'Keyakinan Rendah';
+                            document.querySelector('.badge-success').style.background = 'rgba(239, 68, 68, 0.2)';
+                            document.querySelector('.badge-success').style.color = '#f87171';
+                        } else {
+                            // Gaya visual Keyakinan Tinggi (Biru ke Ungu)
+                            confidenceBar.style.background = 'linear-gradient(90deg, #38bdf8, #818cf8)';
+                            document.querySelector('.badge-success').textContent = 'Akurasi Tinggi';
+                            document.querySelector('.badge-success').style.background = 'rgba(52, 211, 153, 0.2)';
+                            document.querySelector('.badge-success').style.color = '#34d399';
+                        }
+                    }, 100);
+
+                    // Tampilkan panel hasil prediksi
+                    resultArea.classList.remove('hidden');
+                } else {
+                    alert('Error: ' + data.error);
+                    dropZone.classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                loading.classList.add('hidden');
+                dropZone.classList.remove('hidden');
+                alert('Terjadi kesalahan koneksi ke server.');
+            });
+        }
+    </script>
+</body>
+</html>

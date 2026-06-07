@@ -1,0 +1,34 @@
+# 1. Konfigurasi Lingkungan Sensitif (KEAMANAN KUNCI API)
+.env
+sistem_ai/.env
+
+# 2. File Model Berat (Hanya menyertakan model_merek_sepatu.tflite 3.57MB)
+*.keras
+model_resnet_sepatu.tflite
+sistem_ai/model_resnet_sepatu.tflite
+sistem_ai/model_merek_sepatu.keras
+
+# 3. Direktori Dataset Besar (Tidak diunggah ke Git)
+dataset_original/
+dataset_clean/
+dataset_merek/
+dataset_merek_final/
+dataset_final/
+metadata_sepatu.csv
+
+# 4. Berkas Unggahan Dinamis (Uploads)
+sistem_ai/static/uploads/*
+# Kecuali berkas penanda .gitkeep agar struktur folder uploads kosong tetap terbuat di git
+!sistem_ai/static/uploads/.gitkeep
+
+# 5. Cache Python & Kompilasi
+__pycache__/
+*/__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# 6. File Sampah / Cadangan / Arsip Lokal
+*.zip
+grafik_training.png
+test.jpg
+*.log

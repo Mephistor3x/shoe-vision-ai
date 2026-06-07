@@ -1,0 +1,7 @@
+flask>=3.0.0
+tensorflow>=2.21.0
+numpy>=1.23.5
+werkzeug>=3.0.0
+pillow>=10.0.0
+google-generativeai>=0.8.0
+python-dotenv>=1.0.1
