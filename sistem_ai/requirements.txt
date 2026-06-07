@@ -1,5 +1,5 @@
 flask>=3.0.0
-tensorflow>=2.21.0
+tflite-runtime
 numpy>=1.23.5
 werkzeug>=3.0.0
 pillow>=10.0.0

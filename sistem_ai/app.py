@@ -1,14 +1,24 @@
 import os
 import json
 import numpy as np
-import tensorflow as tf
 from flask import Flask, request, render_template, jsonify
 from werkzeug.utils import secure_filename
-from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.mobilenet_v3 import preprocess_input
-import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
+import google.generativeai as genai
+
+# Impor Model AI secara dinamis untuk mendukung tflite-runtime (tanpa full TensorFlow)
+try:
+    import tensorflow as tf
+    from tensorflow.keras.preprocessing import image
+    from tensorflow.keras.applications.mobilenet_v3 import preprocess_input
+    has_tensorflow = True
+    print("[+] Berhasil mengimpor TensorFlow (Menggunakan library lengkap).")
+except ImportError:
+    # Fallback ke tflite_runtime jika full TensorFlow tidak terinstal (misalnya di Hugging Face)
+    import tflite_runtime.interpreter as tflite
+    has_tensorflow = False
+    print("[+] TensorFlow tidak ditemukan. Menggunakan fallback tflite-runtime (Ringan).")
 
 # =====================================================================
 # 1. KONFIGURASI LINGKUNGAN & API KEY GEMINI
@@ -55,17 +65,20 @@ model = None
 # Membaca model TFLite (Prioritas utama karena ringan, cepat, dan hemat memori CPU)
 if os.path.exists(MODEL_TFLITE_PATH):
     print(f"[+] Memuat model TFLite dari: {MODEL_TFLITE_PATH} (Inferensi Cepat)...")
-    interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
+    if has_tensorflow:
+        interpreter = tf.lite.Interpreter(model_path=MODEL_TFLITE_PATH)
+    else:
+        interpreter = tflite.Interpreter(model_path=MODEL_TFLITE_PATH)
     interpreter.allocate_tensors()  # Alokasi memori tensor
     input_details = interpreter.get_input_details()    # Detail bentuk input gambar
     output_details = interpreter.get_output_details()  # Detail bentuk output prediksi
     is_tflite = True
-# Membaca model Keras (Sebagai cadangan lokal jika file TFLite tidak ditemukan)
-elif os.path.exists(MODEL_KERAS_PATH):
+# Membaca model Keras (Sebagai cadangan lokal jika file TFLite tidak ditemukan dan TF terinstal)
+elif has_tensorflow and os.path.exists(MODEL_KERAS_PATH):
     print(f"[+] Memuat model Keras dari: {MODEL_KERAS_PATH} (Fallback)...")
     model = tf.keras.models.load_model(MODEL_KERAS_PATH)
 else:
-    print("[!] ERROR: Tidak ada model (.tflite atau .keras) ditemukan di server!")
+    print("[!] ERROR: Tidak dapat memuat model pendeteksi sepatu!")
 
 # Urutan nama kelas target yang dideteksi oleh model lokal kita
 class_names = ['adidas', 'lainnya', 'new_balance', 'nike', 'puma']
@@ -91,17 +104,26 @@ def predict_shoe(img_path):
     4. Melakukan normalisasi piksel gambar menggunakan preprocessing bawaan MobileNetV3.
     5. Menjalankan inferensi dan menghitung kelas dengan probabilitas (keyakinan) tertinggi.
     """
-    # 1. Load & Resize gambar ke 224x224 piksel
-    img = image.load_img(img_path, target_size=(224, 224))
-    
-    # 2. Konversi gambar ke array NumPy
-    img_array = image.img_to_array(img)
-    
-    # 3. Ubah bentuk array menjadi batch: (1, 224, 224, 3)
-    img_array = np.expand_dims(img_array, axis=0)
-    
-    # 4. Terapkan preprocessing MobileNetV3 (melewatkan pixel [0, 255])
-    img_array = preprocess_input(img_array)
+    if has_tensorflow:
+        # 1. Load & Resize gambar ke 224x224 piksel menggunakan Keras
+        img = image.load_img(img_path, target_size=(224, 224))
+        # 2. Konversi gambar ke array NumPy
+        img_array = image.img_to_array(img)
+        # 3. Ubah bentuk array menjadi batch: (1, 224, 224, 3)
+        img_array = np.expand_dims(img_array, axis=0)
+        # 4. Terapkan preprocessing MobileNetV3
+        img_array = preprocess_input(img_array)
+    else:
+        # 1. Load & Resize gambar menggunakan Pillow (tanpa dependensi Keras)
+        img = Image.open(img_path).resize((224, 224))
+        # Pastikan gambar dalam format RGB (membuang alpha channel jika ada di png/webp)
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        # 2. Konversi gambar ke array numpy
+        img_array = np.array(img, dtype=np.float32)
+        # 3. Ubah bentuk array menjadi batch: (1, 224, 224, 3)
+        img_array = np.expand_dims(img_array, axis=0)
+        # MobileNetV3 pada Keras tidak memerlukan scaling piksel tambahan (pass-through)
 
     if is_tflite:
         # Jalankan inferensi menggunakan interpreter TFLite
@@ -109,10 +131,11 @@ def predict_shoe(img_path):
         interpreter.invoke()
         predictions = interpreter.get_tensor(output_details[0]['index'])
     else:
-        # Jalankan inferensi menggunakan model Keras biasa (jika TFLite absen)
-        if model is None:
-            raise ValueError("Model AI lokal belum berhasil dimuat!")
-        predictions = model.predict(img_array)
+        # Jalankan inferensi menggunakan model Keras biasa (hanya jika full TensorFlow terinstal)
+        if has_tensorflow and model is not None:
+            predictions = model.predict(img_array)
+        else:
+            raise ValueError("Model Keras tidak didukung tanpa pustaka TensorFlow lengkap!")
 
     # Menghitung index probabilitas tertinggi
     predicted_index = np.argmax(predictions[0])
@@ -221,6 +244,7 @@ def predict():
         
         file.save(filepath)
         
+        # Lakukan prediksi
         try:
             # Langkah 1: Prediksi menggunakan Model TFLite lokal
             label, confidence = predict_shoe(filepath)
